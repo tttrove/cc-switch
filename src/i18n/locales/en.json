@@ -1647,7 +1647,13 @@
     "modelExtraFieldKeyPlaceholder": "variants",
     "sdkOptions": "SDK Options",
     "modelOptionKeyPlaceholder": "provider",
-    "modelOptionValuePlaceholder": "{\"order\": [\"baseten\"]}"
+    "modelOptionValuePlaceholder": "{\"order\": [\"baseten\"]}",
+    "fillFromModelsDev": "Fill from models.dev",
+    "fillCapabilitiesNoModels": "Add models first",
+    "fillCapabilitiesFailed": "Failed to load models.dev data",
+    "fillCapabilitiesSuccess": "Filled capabilities for {{count}} models from models.dev",
+    "fillCapabilitiesPartial": "Filled {{count}} models; not found on models.dev: {{missing}}",
+    "fillCapabilitiesNone": "No models found on models.dev"
   },
   "providerPreset": {
     "label": "Provider Preset",

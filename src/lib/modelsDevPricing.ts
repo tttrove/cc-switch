@@ -10,6 +10,16 @@ export interface ModelsDevCost {
   output?: number;
   cache_read?: number;
   cache_write?: number;
+  context_over_200k?: Record<string, number>;
+  tiers?: ModelsDevCostTier[];
+}
+
+export interface ModelsDevCostTier {
+  input?: number;
+  output?: number;
+  cache_read?: number;
+  cache_write?: number;
+  tier?: { type?: string; size?: number };
 }
 
 export interface ModelsDevModalities {
@@ -17,13 +27,31 @@ export interface ModelsDevModalities {
   output?: string[];
 }
 
+export interface ModelsDevLimit {
+  context?: number;
+  input?: number;
+  output?: number;
+}
+
+export interface ModelsDevReasoningOption {
+  type?: string;
+  values?: string[];
+}
+
 export interface ModelsDevModel {
   id?: string;
   name?: string;
+  family?: string;
   release_date?: string;
+  attachment?: boolean;
+  reasoning?: boolean;
+  temperature?: boolean;
+  tool_call?: boolean;
+  limit?: ModelsDevLimit;
   cost?: ModelsDevCost;
   modalities?: ModelsDevModalities;
   status?: string;
+  reasoning_options?: ModelsDevReasoningOption[];
 }
 
 export interface ModelsDevProvider {

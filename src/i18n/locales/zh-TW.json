@@ -1648,7 +1648,13 @@
     "modelExtraFieldKeyPlaceholder": "variants",
     "sdkOptions": "SDK 選項",
     "modelOptionKeyPlaceholder": "provider",
-    "modelOptionValuePlaceholder": "{\"order\": [\"baseten\"]}"
+    "modelOptionValuePlaceholder": "{\"order\": [\"baseten\"]}",
+    "fillFromModelsDev": "從 models.dev 填充",
+    "fillCapabilitiesNoModels": "請先新增模型",
+    "fillCapabilitiesFailed": "取得 models.dev 資料失敗",
+    "fillCapabilitiesSuccess": "已從 models.dev 填充 {{count}} 個模型的能力資料",
+    "fillCapabilitiesPartial": "已填充 {{count}} 個模型，未在 models.dev 找到：{{missing}}",
+    "fillCapabilitiesNone": "所有模型均未在 models.dev 中找到"
   },
   "providerPreset": {
     "label": "預設供應商",
