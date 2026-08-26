@@ -1,5 +1,7 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ComponentProps, PropsWithChildren } from "react";
+import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { describe, expect, it, vi } from "vitest";
 import { OpenCodeFormFields } from "@/components/providers/forms/OpenCodeFormFields";
@@ -9,8 +11,13 @@ type OpenCodeFormFieldsProps = ComponentProps<typeof OpenCodeFormFields>;
 
 const FormShell = ({ children }: PropsWithChildren) => {
   const form = useForm();
+  const [queryClient] = useState(() => new QueryClient());
 
-  return <Form {...form}>{children}</Form>;
+  return (
+    <QueryClientProvider client={queryClient}>
+      <Form {...form}>{children}</Form>
+    </QueryClientProvider>
+  );
 };
 
 const renderOpenCodeForm = (
