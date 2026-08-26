@@ -1648,7 +1648,13 @@
     "modelExtraFieldKeyPlaceholder": "variants",
     "sdkOptions": "SDK オプション",
     "modelOptionKeyPlaceholder": "provider",
-    "modelOptionValuePlaceholder": "{\"order\": [\"baseten\"]}"
+    "modelOptionValuePlaceholder": "{\"order\": [\"baseten\"]}",
+    "fillFromModelsDev": "models.dev から取得",
+    "fillCapabilitiesNoModels": "先にモデルを追加してください",
+    "fillCapabilitiesFailed": "models.dev データの取得に失敗しました",
+    "fillCapabilitiesSuccess": "models.dev から {{count}} 件のモデル能力を取得しました",
+    "fillCapabilitiesPartial": "{{count}} 件を取得しました。models.dev に見つからない: {{missing}}",
+    "fillCapabilitiesNone": "models.dev にモデルが見つかりませんでした"
   },
   "providerPreset": {
     "label": "プロバイダータイプ",

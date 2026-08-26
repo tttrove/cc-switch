@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { useTranslation } from "react-i18next";
+import { useQuery } from "@tanstack/react-query";
 import { FormLabel } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { ImeSafeInput } from "@/components/ui/ime-safe-input";
@@ -12,13 +13,29 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { toast } from "sonner";
-import { Download, Plus, Trash2, ChevronRight, Loader2 } from "lucide-react";
+import {
+  Download,
+  Plus,
+  Trash2,
+  ChevronRight,
+  Loader2,
+  Sparkles,
+} from "lucide-react";
 import { ApiKeySection, ModelDropdown } from "./shared";
 import {
   fetchModelsForConfig,
   showFetchModelsError,
   type FetchedModel,
 } from "@/lib/api/model-fetch";
+import {
+  fetchModelsDevPricing,
+  MODELS_DEV_QUERY_KEY,
+  MODELS_DEV_STALE_TIME_MS,
+} from "@/lib/modelsDevPricing";
+import {
+  applyModelsDevCapabilities,
+  findModelsDevEntry,
+} from "@/lib/opencodeModelCapabilities";
 import { opencodeNpmPackages } from "@/config/opencodeProviderPresets";
 import { cn } from "@/lib/utils";
 import {
@@ -207,6 +224,81 @@ export function OpenCodeFormFields({
 
   const [fetchedModels, setFetchedModels] = useState<FetchedModel[]>([]);
   const [isFetchingModels, setIsFetchingModels] = useState(false);
+
+  const { refetch: refetchModelsDevCatalog } = useQuery({
+    queryKey: MODELS_DEV_QUERY_KEY,
+    queryFn: fetchModelsDevPricing,
+    enabled: false,
+    staleTime: MODELS_DEV_STALE_TIME_MS,
+    retry: 1,
+  });
+  const [isFetchingCapabilities, setIsFetchingCapabilities] = useState(false);
+
+  // 从 models.dev 拉取官方模型能力（limit/cost/modalities/variants）批量填充全部模型行
+  const handleFillFromModelsDev = useCallback(async () => {
+    if (Object.keys(models).length === 0) {
+      toast.info(t("opencode.fillCapabilitiesNoModels"));
+      return;
+    }
+    setIsFetchingCapabilities(true);
+    try {
+      const { data: catalog } = await refetchModelsDevCatalog();
+      if (!catalog) throw new Error("models.dev catalog unavailable");
+      const nextModels: Record<string, OpenCodeModel> = {};
+      const missing: string[] = [];
+      const details: string[] = [];
+      let filled = 0;
+      for (const [key, model] of Object.entries(models)) {
+        const hit = findModelsDevEntry(catalog, key);
+        if (!hit) {
+          missing.push(key);
+          nextModels[key] = model;
+          continue;
+        }
+        const { model: merged, summary } = applyModelsDevCapabilities(
+          model,
+          npm,
+          key,
+          hit.entry,
+        );
+        nextModels[key] = merged;
+        filled += 1;
+        details.push(
+          `${key} ← ${hit.providerId}` +
+            (summary.contextLimit ? ` · ctx ${summary.contextLimit}` : "") +
+            (summary.efforts.length ? ` · ${summary.efforts.join("/")}` : "") +
+            (summary.suppressed.length
+              ? ` · disabled: ${summary.suppressed.join("/")}`
+              : ""),
+        );
+      }
+      onModelsChange(nextModels);
+      if (filled === 0) {
+        toast.warning(t("opencode.fillCapabilitiesNone"), {
+          description: missing.join(", "),
+        });
+      } else if (missing.length > 0) {
+        toast.warning(
+          t("opencode.fillCapabilitiesPartial", {
+            count: filled,
+            missing: missing.join(", "),
+          }),
+        );
+      } else {
+        toast.success(
+          t("opencode.fillCapabilitiesSuccess", { count: filled }),
+          {
+            description: details.join("\n"),
+          },
+        );
+      }
+    } catch (err) {
+      console.warn("[ModelsDevCapabilities] Failed:", err);
+      toast.error(t("opencode.fillCapabilitiesFailed"));
+    } finally {
+      setIsFetchingCapabilities(false);
+    }
+  }, [models, npm, onModelsChange, refetchModelsDevCatalog, t]);
 
   const handleFetchModels = useCallback(() => {
     if (!baseUrl || !apiKey) {
@@ -648,6 +740,23 @@ export function OpenCodeFormFields({
             {t("opencode.models", { defaultValue: "Models" })}
           </FormLabel>
           <div className="flex gap-1">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={handleFillFromModelsDev}
+              disabled={isFetchingCapabilities}
+              className="h-7 gap-1"
+            >
+              {isFetchingCapabilities ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Sparkles className="h-3.5 w-3.5" />
+              )}
+              {t("opencode.fillFromModelsDev", {
+                defaultValue: "Fill from models.dev",
+              })}
+            </Button>
             <Button
               type="button"
               variant="outline"
