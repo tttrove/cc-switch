@@ -336,19 +336,94 @@ function bedrockEffortVariant(
   };
 }
 
-/**
- * 仅 Responses 路径的自定义模型注入行为经过实际验证。
- * 其它 SDK 的第三方网关差异很大，填充时只生成 models.dev 明示的档位，
- * 不擅自写 disabled 避免把网关实际支持的档位隐藏掉。
- */
+function googleThinkingLevelEfforts(modelId: string): string[] {
+  const id = modelId.toLowerCase();
+  if (!id.includes("gemini-3")) return ["low", "high"];
+  if (id.includes("flash-image")) return ["minimal", "high"];
+  if (id.includes("pro-image")) return ["high"];
+  if (id.includes("flash")) return ["minimal", "low", "medium", "high"];
+  return ["low", "medium", "high"];
+}
+
+function isGlm52(modelId: string): boolean {
+  const id = modelId.toLowerCase();
+  return ["glm-5.2", "glm-5-2", "glm-5p2"].some((name) => id.includes(name));
+}
+
+function hasNoAutomaticVariants(modelId: string): boolean {
+  const id = modelId.toLowerCase();
+  return (
+    id.includes("deepseek-chat") ||
+    id.includes("deepseek-reasoner") ||
+    id.includes("deepseek-r1") ||
+    id.includes("deepseek-v3") ||
+    id.includes("minimax") ||
+    (id.includes("glm") && !isGlm52(id)) ||
+    id.includes("kimi") ||
+    id.includes("k2p") ||
+    id.includes("qwen") ||
+    id.includes("big-pickle")
+  );
+}
+
+/** 复刻当前 OpenCode ProviderTransform.variants() 对五类 SDK 生成的默认档位键。 */
 function injectedEffortsForNpm(
   npm: string,
   modelId: string,
   releaseDate?: string,
 ): string[] | null {
+  const id = modelId.toLowerCase();
+
+  if (
+    id.includes("minimax-m3") &&
+    (npm === OPENAI_COMPATIBLE_NPM || ANTHROPIC_NPM.has(npm))
+  ) {
+    return ["none", "thinking"];
+  }
+
+  if (isGlm52(id)) {
+    if (npm === OPENAI_COMPATIBLE_NPM || ANTHROPIC_NPM.has(npm)) {
+      return ["high", "max"];
+    }
+  }
+
+  if (isKimiFamily(id) && ANTHROPIC_NPM.has(npm)) {
+    return ["low", "medium", "high", "xhigh", "max"];
+  }
+
+  if (hasNoAutomaticVariants(id)) return [];
+
+  if (id.includes("grok-3-mini")) return ["low", "high"];
+
   if (RESPONSES_TRIO_NPM.has(npm)) {
     return openaiReasoningEfforts(modelId, releaseDate);
   }
+
+  if (npm === OPENAI_COMPATIBLE_NPM) {
+    if (id.includes("north-mini-code")) return ["none", "high"];
+    const efforts = [...WIDELY_SUPPORTED_EFFORTS];
+    if (id.includes("deepseek-v4")) efforts.push("max");
+    return efforts;
+  }
+
+  if (ANTHROPIC_NPM.has(npm)) {
+    return (
+      anthropicAdaptiveEfforts(id) ??
+      (anthropicOpus45(id) ? WIDELY_SUPPORTED_EFFORTS : ["high", "max"])
+    );
+  }
+
+  if (npm === BEDROCK_NPM) {
+    if (anthropicAdaptiveEfforts(id)) return anthropicAdaptiveEfforts(id);
+    if (isAnthropicBedrockModel(id)) return ["high", "max"];
+    return WIDELY_SUPPORTED_EFFORTS;
+  }
+
+  if (GOOGLE_NPM.has(npm)) {
+    if (id.includes("2.5")) return ["high", "max"];
+    return googleThinkingLevelEfforts(id);
+  }
+
   return null;
 }
 
@@ -480,6 +555,21 @@ export function buildVariantsForModel(
   modelId: string,
   outputLimit?: number,
 ): ModelVariantsResult | null {
+  if (
+    Array.isArray(entry.reasoning_options) &&
+    entry.reasoning_options.length === 0
+  ) {
+    const injected =
+      injectedEffortsForNpm(npm, modelId, entry.release_date) ?? [];
+    return {
+      variants: Object.fromEntries(
+        injected.map((effort) => [effort, { disabled: true }]),
+      ),
+      efforts: [],
+      suppressed: [...injected],
+    };
+  }
+
   const options = normalizedReasoningOptions(entry);
   if (options.length === 0) return null;
 
@@ -612,12 +702,19 @@ export function applyModelsDevCapabilities(
   const capabilities = transformModelsDevEntry(entry);
   const existingLimit =
     existing.limit && typeof existing.limit === "object"
-      ? (existing.limit as { context?: number; output?: number })
+      ? (existing.limit as {
+          context?: number;
+          input?: number;
+          output?: number;
+        })
       : {};
   const devLimit = capabilities.limit as Record<string, number> | undefined;
   const mergedLimit: Record<string, number> = { ...(devLimit ?? {}) };
   if (typeof existingLimit.context === "number") {
     mergedLimit.context = existingLimit.context;
+  }
+  if (typeof existingLimit.input === "number") {
+    mergedLimit.input = existingLimit.input;
   }
   if (typeof existingLimit.output === "number") {
     mergedLimit.output = existingLimit.output;
