@@ -35,7 +35,9 @@ export interface ModelsDevLimit {
 
 export interface ModelsDevReasoningOption {
   type?: string;
-  values?: string[];
+  values?: Array<string | null>;
+  min?: number;
+  max?: number;
 }
 
 export interface ModelsDevModel {
@@ -51,7 +53,7 @@ export interface ModelsDevModel {
   cost?: ModelsDevCost;
   modalities?: ModelsDevModalities;
   status?: string;
-  reasoning_options?: ModelsDevReasoningOption[];
+  reasoning_options?: ModelsDevReasoningOption | ModelsDevReasoningOption[];
 }
 
 export interface ModelsDevProvider {

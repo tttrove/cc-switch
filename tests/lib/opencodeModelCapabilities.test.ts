@@ -1,9 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import type {
-  ModelsDevModel,
-  ModelsDevResponse,
-} from "@/lib/modelsDevPricing";
+import type { ModelsDevModel, ModelsDevResponse } from "@/lib/modelsDevPricing";
 import {
   applyModelsDevCapabilities,
   buildVariantsForModel,
@@ -22,7 +19,9 @@ const GROK_46 = {
   family: "grok",
   attachment: true,
   reasoning: true,
-  reasoning_options: [{ type: "effort", values: ["low", "medium", "high", "xhigh"] }],
+  reasoning_options: [
+    { type: "effort", values: ["low", "medium", "high", "xhigh"] },
+  ],
   tool_call: true,
   structured_output: true,
   temperature: true,
@@ -68,11 +67,100 @@ const GPT_56_SOL: ModelsDevModel = {
   cost: { input: 4, output: 20, cache_read: 0.4, cache_write: 5 },
 };
 
+const CLAUDE_OPUS_46: ModelsDevModel = {
+  id: "claude-opus-4-6",
+  name: "Claude Opus 4.6",
+  reasoning: true,
+  reasoning_options: [
+    { type: "effort", values: ["low", "medium", "high", "max"] },
+    { type: "budget_tokens", min: 1024 },
+  ],
+  limit: { context: 1000000, output: 128000 },
+};
+
+const CLAUDE_OPUS_45: ModelsDevModel = {
+  id: "claude-opus-4-5-20251101",
+  name: "Claude Opus 4.5",
+  reasoning: true,
+  reasoning_options: [
+    { type: "effort", values: ["low", "medium", "high"] },
+    { type: "budget_tokens", min: 1024 },
+  ],
+  limit: { context: 200000, output: 64000 },
+};
+
+const CLAUDE_SONNET_45: ModelsDevModel = {
+  id: "claude-sonnet-4-5-20250929",
+  name: "Claude Sonnet 4.5",
+  reasoning: true,
+  reasoning_options: { type: "budget_tokens", min: 1024 },
+  limit: { context: 200000, output: 64000 },
+};
+
+const GEMINI_36_FLASH: ModelsDevModel = {
+  id: "gemini-3.6-flash",
+  name: "Gemini 3.6 Flash",
+  reasoning: true,
+  reasoning_options: {
+    type: "effort",
+    values: ["minimal", "low", "medium", "high"],
+  },
+  limit: { context: 1048576, output: 65536 },
+};
+
+const GEMINI_25_FLASH: ModelsDevModel = {
+  id: "gemini-2.5-flash",
+  name: "Gemini 2.5 Flash",
+  reasoning: true,
+  reasoning_options: [
+    { type: "toggle" },
+    { type: "budget_tokens", min: 0, max: 24576 },
+  ],
+  limit: { context: 1048576, output: 65536 },
+};
+
+const BEDROCK_CLAUDE_47: ModelsDevModel = {
+  id: "global.anthropic.claude-opus-4-7",
+  name: "Claude Opus 4.7 (Global)",
+  reasoning: true,
+  reasoning_options: {
+    type: "effort",
+    values: ["low", "medium", "high", "xhigh", "max"],
+  },
+  limit: { context: 1000000, output: 128000 },
+};
+
+const BEDROCK_NOVA: ModelsDevModel = {
+  id: "amazon.nova-2-lite-v1:0",
+  name: "Nova 2 Lite",
+  reasoning: true,
+  reasoning_options: [
+    { type: "toggle" },
+    { type: "effort", values: ["low", "medium", "high"] },
+  ],
+  limit: { context: 128000, output: 4096 },
+};
+
+const GEMMA_TOGGLE_ONLY: ModelsDevModel = {
+  id: "gemma-4-26b-a4b-it",
+  name: "Gemma 4 26B",
+  reasoning: true,
+  reasoning_options: { type: "toggle" },
+  limit: { context: 131072, output: 8192 },
+};
+
+const UNKNOWN_ANTHROPIC_EFFORT_MODEL: ModelsDevModel = {
+  id: "gateway-reasoner",
+  name: "Gateway Reasoner",
+  reasoning: true,
+  reasoning_options: { type: "effort", values: ["low", "high"] },
+  limit: { context: 128000, output: 8192 },
+};
+
 describe("injectedEffortsForModel", () => {
-  it("复刻 H7：gpt-5 系按发布日期插入 none/minimal/xhigh", () => {
+  it("复刻当前 OpenCode：gpt-5.6 使用 none/xhigh，不再注入 minimal", () => {
     expect(injectedEffortsForModel("gpt-5.6-sol", "2026-07-09")).toEqual([
       "none",
-      "minimal",
       "low",
       "medium",
       "high",
@@ -91,9 +179,15 @@ describe("injectedEffortsForModel", () => {
   });
 
   it("特殊系列只注入单一档位", () => {
-    expect(injectedEffortsForModel("gpt-5.6-deep-research")).toEqual(["medium"]);
-    expect(injectedEffortsForModel("gpt-5-chat", "2026-07-09")).toEqual(["medium"]);
-    expect(injectedEffortsForModel("gpt-5-pro", "2026-07-09")).toEqual(["high"]);
+    expect(injectedEffortsForModel("gpt-5.6-deep-research")).toEqual([
+      "medium",
+    ]);
+    expect(injectedEffortsForModel("gpt-5.6-chat", "2026-07-09")).toEqual([
+      "medium",
+    ]);
+    expect(injectedEffortsForModel("gpt-5-pro", "2026-07-09")).toEqual([
+      "high",
+    ]);
   });
 
   it("无日期的基础模型为 low/medium/high", () => {
@@ -195,26 +289,155 @@ describe("buildVariantsForModel", () => {
     expect(result?.variants.none).toEqual({ disabled: true });
   });
 
-  it("@ai-sdk/openai-compatible 仅生成 reasoningEffort 并屏蔽注入集内不支持的 max", () => {
+  it("@ai-sdk/openai-compatible 仅生成 reasoningEffort", () => {
     const result = buildVariantsForModel(
       GROK_46,
       "@ai-sdk/openai-compatible",
       "grok-4.6",
     );
-    // 注入集 [high, max]：high 在官方档位内不屏蔽，max 不被支持 → disabled 屏蔽
-    expect(result?.suppressed).toEqual(["max"]);
-    expect(result?.variants.max).toEqual({ disabled: true });
+    // 当前 OpenCode 对通用兼容接口为 low/medium/high；不额外猜测 max。
+    expect(result?.suppressed).toEqual([]);
+    expect(result?.variants).not.toHaveProperty("max");
     expect(result?.variants.low).toEqual({ reasoningEffort: "low" });
   });
 
   it("无 reasoning_options(effort) 时返回 null", () => {
     expect(
+      buildVariantsForModel({ name: "m" }, "@ai-sdk/openai", "m"),
+    ).toBeNull();
+  });
+
+  it("Anthropic effort 使用 effort + thinking，而不是 reasoningEffort", () => {
+    const result = buildVariantsForModel(
+      CLAUDE_OPUS_46,
+      "@ai-sdk/anthropic",
+      "claude-opus-4-6",
+      128000,
+    );
+    expect(result?.efforts).toEqual(["low", "medium", "high", "max"]);
+    expect(result?.variants.high).toEqual({
+      thinking: { type: "adaptive" },
+      effort: "high",
+    });
+    expect(result?.variants.high).not.toHaveProperty("reasoningEffort");
+  });
+
+  it("旧版 Anthropic effort 同时生成预算 thinking", () => {
+    const result = buildVariantsForModel(
+      CLAUDE_OPUS_45,
+      "@ai-sdk/anthropic",
+      "claude-opus-4-5-20251101",
+      64000,
+    );
+    expect(result?.variants.high).toEqual({
+      thinking: { type: "enabled", budgetTokens: 16000 },
+      effort: "high",
+    });
+  });
+
+  it("Anthropic budget_tokens 生成 high/max budgetTokens", () => {
+    const result = buildVariantsForModel(
+      CLAUDE_SONNET_45,
+      "@ai-sdk/anthropic",
+      "claude-sonnet-4-5-20250929",
+      64000,
+    );
+    expect(result?.efforts).toEqual(["high", "max"]);
+    expect(result?.variants.high).toEqual({
+      thinking: { type: "enabled", budgetTokens: 16000 },
+    });
+    expect(result?.variants.max).toEqual({
+      thinking: { type: "enabled", budgetTokens: 31999 },
+    });
+  });
+
+  it("Amazon Bedrock effort 使用 reasoningConfig", () => {
+    const result = buildVariantsForModel(
+      BEDROCK_CLAUDE_47,
+      "@ai-sdk/amazon-bedrock",
+      "global.anthropic.claude-opus-4-7",
+      128000,
+    );
+    expect(result?.variants.high).toEqual({
+      reasoningConfig: {
+        type: "adaptive",
+        maxReasoningEffort: "high",
+        display: "summarized",
+      },
+    });
+  });
+
+  it("Amazon Bedrock 非 Anthropic effort 使用 enabled reasoningConfig", () => {
+    const result = buildVariantsForModel(
+      BEDROCK_NOVA,
+      "@ai-sdk/amazon-bedrock",
+      "amazon.nova-2-lite-v1:0",
+      4096,
+    );
+    expect(result?.variants.high).toEqual({
+      reasoningConfig: {
+        type: "enabled",
+        maxReasoningEffort: "high",
+      },
+    });
+  });
+
+  it("Google Gemini effort 使用 thinkingConfig.thinkingLevel", () => {
+    const result = buildVariantsForModel(
+      GEMINI_36_FLASH,
+      "@ai-sdk/google",
+      "gemini-3.6-flash",
+    );
+    expect(result?.variants.high).toEqual({
+      thinkingConfig: { includeThoughts: true, thinkingLevel: "high" },
+    });
+  });
+
+  it("Google Gemini budget_tokens 使用 thinkingConfig.thinkingBudget", () => {
+    const result = buildVariantsForModel(
+      GEMINI_25_FLASH,
+      "@ai-sdk/google",
+      "gemini-2.5-flash",
+      65536,
+    );
+    expect(result?.efforts).toEqual(["high", "max"]);
+    expect(result?.variants.high).toEqual({
+      thinkingConfig: { includeThoughts: true, thinkingBudget: 12288 },
+    });
+    expect(result?.variants.max).toEqual({
+      thinkingConfig: { includeThoughts: true, thinkingBudget: 24576 },
+    });
+  });
+
+  it("toggle-only 元数据不猜测参数，并在应用时保留已有 variants", () => {
+    const existing: OpenCodeModel = {
+      name: "Gemma",
+      variants: { thinking: { thinkingConfig: { includeThoughts: true } } },
+    };
+    expect(
       buildVariantsForModel(
-        { name: "m" },
-        "@ai-sdk/openai",
-        "m",
+        GEMMA_TOGGLE_ONLY,
+        "@ai-sdk/google",
+        "gemma-4-26b-a4b-it",
       ),
     ).toBeNull();
+    const result = applyModelsDevCapabilities(
+      existing,
+      "@ai-sdk/google",
+      "gemma-4-26b-a4b-it",
+      GEMMA_TOGGLE_ONLY,
+    );
+    expect(result.model.variants).toEqual(existing.variants);
+  });
+
+  it("未知 Anthropic effort 模型使用 SDK 的 effort fallback，而非 OpenAI 字段", () => {
+    const result = buildVariantsForModel(
+      UNKNOWN_ANTHROPIC_EFFORT_MODEL,
+      "@ai-sdk/anthropic",
+      "gateway-reasoner",
+    );
+    expect(result?.variants.low).toEqual({ effort: "low" });
+    expect(result?.variants.low).not.toHaveProperty("reasoningEffort");
   });
 });
 
@@ -284,7 +507,11 @@ describe("applyModelsDevCapabilities", () => {
       GPT_56_SOL,
     );
     // 用户只填了 context → 保留；output 空缺 → 补官方值
-    expect(model.limit).toEqual({ context: 123456, input: 922000, output: 128000 });
+    expect(model.limit).toEqual({
+      context: 123456,
+      input: 922000,
+      output: 128000,
+    });
   });
 
   it("models.dev 条目无 limit 时不清除用户已填的 limit", () => {
@@ -318,13 +545,13 @@ describe("applyModelsDevCapabilities", () => {
     expect(model.name).toBe("Grok 4.6");
   });
 
-  it("无 reasoning_options 时不写 variants 且清除旧 variants", () => {
+  it("无 reasoning_options 时保留旧 variants", () => {
     const { model } = applyModelsDevCapabilities(
       existing,
       "@ai-sdk/openai",
       "m",
       { name: "M" },
     );
-    expect(model).not.toHaveProperty("variants");
+    expect(model.variants).toEqual(existing.variants);
   });
 });
