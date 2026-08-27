@@ -119,6 +119,25 @@ const GEMINI_25_FLASH: ModelsDevModel = {
   limit: { context: 1048576, output: 65536 },
 };
 
+const GEMINI_37_FLASH: ModelsDevModel = {
+  id: "gemini-3.7-flash",
+  name: "Gemini 3.7 Flash",
+  reasoning: true,
+  reasoning_options: {
+    type: "effort",
+    values: ["low", "medium", "high"],
+  },
+  limit: { context: 1048576, output: 65536 },
+};
+
+const EMPTY_REASONING_OPTIONS: ModelsDevModel = {
+  id: "gemini-3.7-flash",
+  name: "Gemini 3.7 Flash",
+  reasoning: true,
+  reasoning_options: [],
+  limit: { context: 1048576, output: 65536 },
+};
+
 const BEDROCK_CLAUDE_47: ModelsDevModel = {
   id: "global.anthropic.claude-opus-4-7",
   name: "Claude Opus 4.7 (Global)",
@@ -301,6 +320,21 @@ describe("buildVariantsForModel", () => {
     expect(result?.variants.low).toEqual({ reasoningEffort: "low" });
   });
 
+  it("OpenAI Compatible 屏蔽默认生成但 models.dev 未声明的档位", () => {
+    const result = buildVariantsForModel(
+      {
+        id: "gpt-5-pro",
+        reasoning_options: { type: "effort", values: ["high"] },
+      },
+      "@ai-sdk/openai-compatible",
+      "gpt-5-pro",
+    );
+    expect(result?.variants.high).toEqual({ reasoningEffort: "high" });
+    expect(result?.variants.low).toEqual({ disabled: true });
+    expect(result?.variants.medium).toEqual({ disabled: true });
+    expect(result?.suppressed).toEqual(["low", "medium"]);
+  });
+
   it("无 reasoning_options(effort) 时返回 null", () => {
     expect(
       buildVariantsForModel({ name: "m" }, "@ai-sdk/openai", "m"),
@@ -393,6 +427,16 @@ describe("buildVariantsForModel", () => {
     });
   });
 
+  it("Google Gemini 屏蔽默认生成但 models.dev 未声明的 thinkingLevel", () => {
+    const result = buildVariantsForModel(
+      GEMINI_37_FLASH,
+      "@ai-sdk/google",
+      "gemini-3.7-flash",
+    );
+    expect(result?.variants.minimal).toEqual({ disabled: true });
+    expect(result?.suppressed).toEqual(["minimal"]);
+  });
+
   it("Google Gemini budget_tokens 使用 thinkingConfig.thinkingBudget", () => {
     const result = buildVariantsForModel(
       GEMINI_25_FLASH,
@@ -428,6 +472,22 @@ describe("buildVariantsForModel", () => {
       GEMMA_TOGGLE_ONLY,
     );
     expect(result.model.variants).toEqual(existing.variants);
+  });
+
+  it("显式空 reasoning_options 屏蔽 OpenCode 自动生成的所有档位", () => {
+    const result = buildVariantsForModel(
+      EMPTY_REASONING_OPTIONS,
+      "@ai-sdk/google",
+      "gemini-3.7-flash",
+    );
+    expect(result?.efforts).toEqual([]);
+    expect(result?.variants).toEqual({
+      minimal: { disabled: true },
+      low: { disabled: true },
+      medium: { disabled: true },
+      high: { disabled: true },
+    });
+    expect(result?.suppressed).toEqual(["minimal", "low", "medium", "high"]);
   });
 
   it("未知 Anthropic effort 模型使用 SDK 的 effort fallback，而非 OpenAI 字段", () => {
@@ -510,6 +570,20 @@ describe("applyModelsDevCapabilities", () => {
     expect(model.limit).toEqual({
       context: 123456,
       input: 922000,
+      output: 128000,
+    });
+  });
+
+  it("导入或原始 JSON 中手填的 limit.input 也不被 models.dev 覆盖", () => {
+    const { model } = applyModelsDevCapabilities(
+      { name: "", limit: { input: 654321 } },
+      "@ai-sdk/openai",
+      "gpt-5.6-sol",
+      GPT_56_SOL,
+    );
+    expect(model.limit).toEqual({
+      context: 1050000,
+      input: 654321,
       output: 128000,
     });
   });
