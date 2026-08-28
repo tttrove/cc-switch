@@ -6,22 +6,22 @@ on:
       ref:
         description: "要构建的分支或提交"
         required: true
-        default: main
+        default: feat/opencode-model-capabilities-fill
         type: string
       tag:
         description: "Release 标签"
         required: true
-        default: v3.20.1-tttrove.1
+        default: v3.20.1-tttrove.2
         type: string
       asset_version:
         description: "安装包文件名中的版本号"
         required: true
-        default: v3.20.1-tttrove.1
+        default: v3.20.1-tttrove.2
         type: string
       app_version:
         description: "Windows 内部产品版本，预发布部分必须是数字"
         required: true
-        default: 3.20.1-1
+        default: 3.20.1-2
         type: string
 
 permissions:
