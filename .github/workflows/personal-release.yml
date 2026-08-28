@@ -6,7 +6,7 @@ on:
       ref:
         description: "要构建的分支或提交"
         required: true
-        default: feat/opencode-model-capabilities-fill
+        default: feat/opencode-model-capabilities-v3.20.1
         type: string
       tag:
         description: "Release 标签"
