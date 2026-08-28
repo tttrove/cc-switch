@@ -47,7 +47,9 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          pnpm tauri build --bundles msi,nsis --config '{"bundle":{"createUpdaterArtifacts":false}}'
+          $config = '{"bundle":{"createUpdaterArtifacts":false}}'
+          pnpm tauri build --bundles msi --config $config
+          pnpm tauri build --bundles nsis --config $config
 
       - name: Upload installers and executable
         uses: actions/upload-artifact@v4
