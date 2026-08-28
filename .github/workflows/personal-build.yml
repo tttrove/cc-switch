@@ -16,6 +16,7 @@ jobs:
   build-windows:
     name: Build Windows installers
     runs-on: windows-2022
+    timeout-minutes: 45
 
     steps:
       - name: Checkout
@@ -42,6 +43,16 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      - name: Cache Cargo registry and build
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            src-tauri/target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('src-tauri/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-
 
       - name: Build unsigned Windows packages
         shell: pwsh
