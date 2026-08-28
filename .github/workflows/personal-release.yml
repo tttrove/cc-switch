@@ -75,8 +75,15 @@ jobs:
         run: |
           $ErrorActionPreference = 'Stop'
           $version = $env:ASSET_VERSION.TrimStart('v')
-          $config = '{"version":"' + $version + '","productName":"CC Switch (tttrove)","identifier":"com.ccswitch.desktop.tttrove","bundle":{"createUpdaterArtifacts":false}}'
-          pnpm tauri build --bundles msi --config $config
+          $configPath = Join-Path $env:RUNNER_TEMP 'personal-tauri-config.json'
+          $config = [ordered]@{
+            version = $version
+            productName = 'CC Switch (tttrove)'
+            identifier = 'com.ccswitch.desktop.tttrove'
+            bundle = [ordered]@{ createUpdaterArtifacts = $false }
+          } | ConvertTo-Json -Compress
+          $config | Set-Content -Path $configPath -Encoding utf8NoBOM
+          pnpm tauri build --bundles msi --config $configPath
           $msi = Get-ChildItem -Path 'src-tauri/target/release/bundle/msi' -Filter '*.msi' -File | Select-Object -First 1
           if ($null -eq $msi) {
             throw 'No Windows MSI installer was generated'
