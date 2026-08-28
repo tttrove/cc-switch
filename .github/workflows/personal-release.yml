@@ -1,0 +1,97 @@
+name: Personal Windows Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "要构建的分支或提交"
+        required: true
+        default: main
+        type: string
+      tag:
+        description: "Release 标签"
+        required: true
+        default: v3.20.1-tttrove.1
+        type: string
+      asset_version:
+        description: "安装包文件名中的版本号"
+        required: true
+        default: v3.20.1-tttrove.1
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: personal-release-${{ inputs.tag }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-release:
+    name: Build and publish Windows MSI
+    runs-on: windows-2022
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Setup pnpm
+        shell: pwsh
+        env:
+          COREPACK_ENABLE_DOWNLOAD_PROMPT: "0"
+        run: |
+          corepack enable
+          corepack install
+          pnpm --version
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Cache Cargo registry and build
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            src-tauri/target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('src-tauri/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-
+
+      - name: Build unsigned MSI
+        shell: pwsh
+        env:
+          ASSET_VERSION: ${{ inputs.asset_version }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $version = $env:ASSET_VERSION.TrimStart('v')
+          $config = '{"version":"' + $version + '","productName":"CC Switch (tttrove)","identifier":"com.ccswitch.desktop.tttrove","bundle":{"createUpdaterArtifacts":false}}'
+          pnpm tauri build --bundles msi --config $config
+          $msi = Get-ChildItem -Path 'src-tauri/target/release/bundle/msi' -Filter '*.msi' -File | Select-Object -First 1
+          if ($null -eq $msi) {
+            throw 'No Windows MSI installer was generated'
+          }
+          New-Item -ItemType Directory -Force -Path release-assets | Out-Null
+          Copy-Item $msi.FullName "release-assets/CC-Switch-$env:ASSET_VERSION-Windows.msi"
+          Write-Host "Created release-assets/CC-Switch-$env:ASSET_VERSION-Windows.msi"
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ inputs.tag }}
+          name: CC Switch ${{ inputs.tag }}
+          prerelease: true
+          generate_release_notes: true
+          files: release-assets/CC-Switch-${{ inputs.asset_version }}-Windows.msi
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
