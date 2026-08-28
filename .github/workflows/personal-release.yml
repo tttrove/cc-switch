@@ -18,6 +18,11 @@ on:
         required: true
         default: v3.20.1-tttrove.1
         type: string
+      app_version:
+        description: "Windows 内部产品版本，预发布部分必须是数字"
+        required: true
+        default: 3.20.1-1
+        type: string
 
 permissions:
   contents: write
@@ -72,9 +77,10 @@ jobs:
         shell: pwsh
         env:
           ASSET_VERSION: ${{ inputs.asset_version }}
+          APP_VERSION: ${{ inputs.app_version }}
         run: |
           $ErrorActionPreference = 'Stop'
-          $version = $env:ASSET_VERSION.TrimStart('v')
+          $version = $env:APP_VERSION
           $configPath = Join-Path $env:RUNNER_TEMP 'personal-tauri-config.json'
           $config = [ordered]@{
             version = $version
