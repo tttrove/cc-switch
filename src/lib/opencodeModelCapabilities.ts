@@ -77,6 +77,16 @@ const BEDROCK_NPM = "@ai-sdk/amazon-bedrock";
 const GOOGLE_NPM = new Set(["@ai-sdk/google", "@ai-sdk/google-vertex"]);
 
 const VARIANT_INCLUDE = ["reasoning.encrypted_content"];
+/** OpenCode 各 SDK 已知的全部思考档位（「添加档位」下拉展示全集，弱→强）。 */
+export const ALL_EFFORT_LEVELS = [
+  "none",
+  "minimal",
+  "low",
+  "medium",
+  "high",
+  "xhigh",
+  "max",
+] as const;
 const WIDELY_SUPPORTED_EFFORTS = ["low", "medium", "high"];
 const OPENAI_GPT5_1_EFFORTS = ["none", ...WIDELY_SUPPORTED_EFFORTS];
 const OPENAI_GPT5_2_PLUS_EFFORTS = [...OPENAI_GPT5_1_EFFORTS, "xhigh"];
@@ -100,12 +110,37 @@ export interface ModelsDevEntryHit {
   entry: ModelsDevModel;
 }
 
+/** variants 档位键名风格：plain 纯名称；numbered 数字前缀（对配置 A-Z 重排免疫）。 */
+export type ModelsDevVariantsStyle = "plain" | "numbered";
+
+export interface BuildVariantsOptions {
+  style?: ModelsDevVariantsStyle;
+}
+
 export interface ModelVariantsResult {
   variants: Record<string, Record<string, unknown>>;
-  /** 成功生成的 variants 键名 */
+  /** 成功生成的 variants 键名（numbered 风格下为实际写入的带序号键名） */
   efforts: string[];
   /** 被写入 {"disabled": true} 屏蔽的自动注入档位 */
   suppressed: string[];
+}
+
+/** numbered 风格键名：按声明顺序（弱→强）两位零填充编号，如 01-low。 */
+export function numberedKey(index: number, effort: string): string {
+  return `${String(index + 1).padStart(2, "0")}-${effort}`;
+}
+
+/** 扫描现有 variants 中 NN- 前缀的最大序号，返回追加编号后的新键名。 */
+export function nextNumberedKey(
+  variants: Record<string, unknown> | undefined,
+  effort: string,
+): string {
+  let max = 0;
+  for (const key of Object.keys(variants ?? {})) {
+    const match = /^(\d{1,2})-/.exec(key);
+    if (match) max = Math.max(max, Number(match[1]));
+  }
+  return numberedKey(max, effort);
 }
 
 export interface CapabilityFillSummary {
@@ -367,7 +402,7 @@ function hasNoAutomaticVariants(modelId: string): boolean {
 }
 
 /** 复刻当前 OpenCode ProviderTransform.variants() 对五类 SDK 生成的默认档位键。 */
-function injectedEffortsForNpm(
+export function injectedEffortsForNpm(
   npm: string,
   modelId: string,
   releaseDate?: string,
@@ -459,6 +494,16 @@ function variantObject(
   return undefined;
 }
 
+/** 供「添加档位」UI 为单个 effort 生成正确 SDK 参数体；未知 SDK 返回 undefined。 */
+export function buildVariantForEffort(
+  npm: string,
+  modelId: string,
+  effort: string,
+  outputLimit?: number,
+): Record<string, unknown> | undefined {
+  return variantObject(effort, npm, modelId, outputLimit);
+}
+
 function reasoningBudgetVariant(
   npm: string,
   budget: number,
@@ -548,13 +593,17 @@ function budgetValues(
  * 从 models.dev 的 reasoning_options 生成 variants。
  * effort、budget_tokens 和 SDK 参数名均按 OpenCode 当前转换规则处理；
  * 只有 toggle 或未知 SDK 时返回 null，让调用方保留原有配置。
+ * style 为 numbered 时档位键按声明顺序（弱→强）加两位序号前缀，
+ * 注入的 plain 档位会自动落入 suppressed（disabled）屏蔽。
  */
 export function buildVariantsForModel(
   entry: ModelsDevModel,
   npm: string,
   modelId: string,
   outputLimit?: number,
+  options?: BuildVariantsOptions,
 ): ModelVariantsResult | null {
+  const style = options?.style ?? "plain";
   if (
     Array.isArray(entry.reasoning_options) &&
     entry.reasoning_options.length === 0
@@ -570,26 +619,30 @@ export function buildVariantsForModel(
     };
   }
 
-  const options = normalizedReasoningOptions(entry);
-  if (options.length === 0) return null;
+  const options_ = normalizedReasoningOptions(entry);
+  if (options_.length === 0) return null;
 
-  const declaredEfforts = effortValues(options);
+  const declaredEfforts = effortValues(options_);
   const variants: Record<string, Record<string, unknown>> = {};
   const generatedKeys: string[] = [];
 
   // OpenCode gives effort metadata precedence over budget/toggle metadata.
   if (declaredEfforts.length > 0) {
-    for (const effort of declaredEfforts) {
+    declaredEfforts.forEach((effort, index) => {
       const value = variantObject(effort, npm, modelId, outputLimit);
       if (value) {
-        variants[effort] = value;
-        generatedKeys.push(effort);
+        const key = style === "numbered" ? numberedKey(index, effort) : effort;
+        variants[key] = value;
+        generatedKeys.push(key);
       }
-    }
+    });
   } else {
-    const budget = budgetValues(options, npm, outputLimit);
-    Object.assign(variants, budget);
-    generatedKeys.push(...Object.keys(budget));
+    const budget = budgetValues(options_, npm, outputLimit);
+    Object.entries(budget).forEach(([effort, value], index) => {
+      const key = style === "numbered" ? numberedKey(index, effort) : effort;
+      variants[key] = value;
+      generatedKeys.push(key);
+    });
   }
 
   // toggle-only metadata has no safe, common payload for these SDKs.
@@ -694,6 +747,7 @@ export function applyModelsDevCapabilities(
   npm: string,
   modelId: string,
   entry: ModelsDevModel,
+  options?: BuildVariantsOptions,
 ): CapabilityFillResult {
   const next: Record<string, unknown> = { ...existing };
   const existingVariants = existing.variants;
@@ -735,6 +789,7 @@ export function applyModelsDevCapabilities(
     npm,
     modelId,
     outputLimit,
+    options,
   );
   if (variantsResult) {
     next.variants = variantsResult.variants;

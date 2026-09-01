@@ -3,9 +3,11 @@ import { describe, expect, it } from "vitest";
 import type { ModelsDevModel, ModelsDevResponse } from "@/lib/modelsDevPricing";
 import {
   applyModelsDevCapabilities,
+  buildVariantForEffort,
   buildVariantsForModel,
   findModelsDevEntry,
   injectedEffortsForModel,
+  nextNumberedKey,
   transformModelsDevEntry,
 } from "@/lib/opencodeModelCapabilities";
 import type { OpenCodeModel } from "@/types";
@@ -498,6 +500,136 @@ describe("buildVariantsForModel", () => {
     );
     expect(result?.variants.low).toEqual({ effort: "low" });
     expect(result?.variants.low).not.toHaveProperty("reasoningEffort");
+  });
+
+  it("numbered 风格按声明顺序编号，并屏蔽注入的 plain 档位", () => {
+    const result = buildVariantsForModel(
+      GROK_46,
+      "@ai-sdk/openai",
+      "grok-4.6",
+      undefined,
+      { style: "numbered" },
+    );
+    expect(result?.efforts).toEqual([
+      "01-low",
+      "02-medium",
+      "03-high",
+      "04-xhigh",
+    ]);
+    // 注入的 plain 档（none 以及 low/medium/high/xhigh 的 plain 名）全部屏蔽
+    expect(result?.suppressed).toEqual([
+      "none",
+      "low",
+      "medium",
+      "high",
+      "xhigh",
+    ]);
+    expect(Object.keys(result?.variants ?? {})).toEqual([
+      "01-low",
+      "02-medium",
+      "03-high",
+      "04-xhigh",
+      "none",
+      "low",
+      "medium",
+      "high",
+      "xhigh",
+    ]);
+    expect(result?.variants["01-low"]).toEqual({
+      reasoningEffort: "low",
+      reasoningSummary: "auto",
+      include: ["reasoning.encrypted_content"],
+    });
+    expect(result?.variants.low).toEqual({ disabled: true });
+  });
+
+  it("numbered 风格 openai-compatible 生成带序号键并屏蔽注入档位", () => {
+    const result = buildVariantsForModel(
+      GROK_46,
+      "@ai-sdk/openai-compatible",
+      "grok-4.6",
+      undefined,
+      { style: "numbered" },
+    );
+    expect(result?.efforts).toEqual([
+      "01-low",
+      "02-medium",
+      "03-high",
+      "04-xhigh",
+    ]);
+    expect(result?.variants["01-low"]).toEqual({ reasoningEffort: "low" });
+    expect(result?.variants.low).toEqual({ disabled: true });
+    expect(result?.variants.medium).toEqual({ disabled: true });
+  });
+
+  it("numbered 风格 Anthropic budget_tokens 生成 01-high/02-max", () => {
+    const result = buildVariantsForModel(
+      CLAUDE_SONNET_45,
+      "@ai-sdk/anthropic",
+      "claude-sonnet-4-5-20250929",
+      64000,
+      { style: "numbered" },
+    );
+    expect(result?.efforts).toEqual(["01-high", "02-max"]);
+    expect(result?.variants["01-high"]).toEqual({
+      thinking: { type: "enabled", budgetTokens: 16000 },
+    });
+    expect(result?.variants["02-max"]).toEqual({
+      thinking: { type: "enabled", budgetTokens: 31999 },
+    });
+  });
+
+  it("numbered 风格重复填充幂等，不叠加序号前缀", () => {
+    const first = applyModelsDevCapabilities(
+      { name: "GPT-5.6 Sol" },
+      "@ai-sdk/openai",
+      "gpt-5.6-sol",
+      GPT_56_SOL,
+      { style: "numbered" },
+    );
+    // 6 个带序号档位 + 5 个被屏蔽的注入 plain 档
+    expect(Object.keys(first.model.variants as object)).toEqual([
+      "01-none",
+      "02-low",
+      "03-medium",
+      "04-high",
+      "05-xhigh",
+      "06-max",
+      "none",
+      "low",
+      "medium",
+      "high",
+      "xhigh",
+    ]);
+    const second = applyModelsDevCapabilities(
+      first.model,
+      "@ai-sdk/openai",
+      "gpt-5.6-sol",
+      GPT_56_SOL,
+      { style: "numbered" },
+    );
+    expect(second.model.variants).toEqual(first.model.variants);
+  });
+
+  it("nextNumberedKey 在现有最大序号后追加，无前缀键从 01 起", () => {
+    expect(
+      nextNumberedKey(
+        { "01-low": {}, "02-high": {} },
+        "max",
+      ),
+    ).toBe("03-max");
+    expect(nextNumberedKey({ low: {}, high: {} }, "medium")).toBe("01-medium");
+    expect(nextNumberedKey(undefined, "low")).toBe("01-low");
+  });
+
+  it("buildVariantForEffort 按 SDK 生成单个档位参数体", () => {
+    expect(
+      buildVariantForEffort("@ai-sdk/openai-compatible", "m", "high"),
+    ).toEqual({ reasoningEffort: "high" });
+    expect(
+      buildVariantForEffort("@ai-sdk/anthropic", "claude-opus-4-6", "high", 128000),
+    ).toEqual({ thinking: { type: "adaptive" }, effort: "high" });
+    expect(buildVariantForEffort("unknown-sdk", "m", "high")).toBeUndefined();
   });
 });
 
